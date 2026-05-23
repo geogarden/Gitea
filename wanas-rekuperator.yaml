@@ -1,0 +1,947 @@
+substitutions:
+  device_name: wanas-rekuperator
+  friendly_name: "WANAS Rekuperator"
+  modbus_address: "1"  # Adres Modbus urządzenia (rejestr 24, domyślnie 1)
+ 
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+ 
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "mANifvNJAyx3601ekD/1sNyK8RehP8QfIESZzYhbtAo="
+
+ota:
+  - platform: esphome
+    password: "53a8f0ba184d75178f9d538c47a623bd"
+
+logger:
+  baud_rate: 0  # Wyłącz logger na UART0 jeśli używasz do Modbus
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+captive_portal:
+
+
+# ─── UART / Modbus ────────────────────────────────────────────────────────────
+# Podłączenie RS-485 do esp32:
+#   GPIO16 (RX) → A (DATA+) konwertera RS-485
+#   GPIO17 (TX) → B (DATA-) konwertera RS-485
+#   GPIO4       → DE/RE (kierunek transmisji) konwertera RS-485
+uart:
+  id: modbus_uart
+  tx_pin: GPIO17
+  rx_pin: GPIO16
+  baud_rate: 19200   # Domyślna prędkość wg rejestru 25 (wartość 3 = 19200)
+  parity: EVEN       # Domyślny parametr wg rejestru 26 (wartość 1 = E-8-1)
+  stop_bits: 1
+  data_bits: 8
+
+modbus:
+  id: modbus_bus
+  uart_id: modbus_uart
+  flow_control_pin: GPIO4
+
+modbus_controller:
+  - id: wanas
+    address: ${modbus_address}
+    modbus_id: modbus_bus
+    setup_priority: -10
+    update_interval: 10s   # Odświeżanie co 10 sekund
+
+
+# ─── SENSORY (tylko odczyt) ───────────────────────────────────────────────────
+sensor:
+  # Rejestr 0 – Wydatek nawiewu [m³/h]
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Wydatek nawiewu"
+    register_type: holding
+    address: 0
+    unit_of_measurement: "m³/h"
+    device_class: volume_flow_rate
+    state_class: measurement
+    accuracy_decimals: 0
+
+  # Rejestr 1 – Wydatek wywiewu [m³/h]
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Wydatek wywiewu"
+    register_type: holding
+    address: 1
+    unit_of_measurement: "m³/h"
+    device_class: volume_flow_rate
+    state_class: measurement
+    accuracy_decimals: 0
+
+  # Rejestr 4 – Temperatura zewnętrzna
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Temperatura zewnętrzna"
+    register_type: holding
+    address: 4
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: |-
+          if (x == 63066) return NAN;  // Błąd czujnika
+          if (x > 32767) return (x - 65536) / 10.0;
+          return x / 10.0;
+
+  # Rejestr 5 – Temperatura wyrzutowa
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Temperatura wyrzutowa"
+    register_type: holding
+    address: 5
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: |-
+          if (x == 63066) return NAN;
+          if (x > 32767) return (x - 65536) / 10.0;
+          return x / 10.0;
+
+  # Rejestr 6 – Temperatura nawiewowa
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Temperatura nawiewowa"
+    register_type: holding
+    address: 6
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: |-
+          if (x == 63066) return NAN;
+          if (x > 32767) return (x - 65536) / 10.0;
+          return x / 10.0;
+
+  # Rejestr 7 – Temperatura pomieszczenia
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Temperatura pomieszczenia"
+    register_type: holding
+    address: 7
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: |-
+          if (x == 63066) return NAN;
+          if (x > 32767) return (x - 65536) / 10.0;
+          return x / 10.0;
+
+  # Rejestr 29 – EXTRA TEMP
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Temperatura dodatkowa (EXTRA)"
+    register_type: holding
+    address: 29
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: |-
+          if (x == 63066) return NAN;
+          if (x > 32767) return (x - 65536) / 10.0;
+          return x / 10.0;
+
+  # Rejestr 31 – Stan bypass (wartość numeryczna)
+  # Zgodnie z integracją: odczyt stanu jako sensor (0/1)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Stan bypass"
+    register_type: holding
+    address: 31
+    unit_of_measurement: ""
+    state_class: measurement
+    accuracy_decimals: 0
+
+  # Rejestr 32 – Stan nawilżacza (wartość numeryczna)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Stan nawilżacza"
+    register_type: holding
+    address: 32
+    unit_of_measurement: ""
+    state_class: measurement
+    accuracy_decimals: 0
+
+  # Rejestr 33 – Stan nagrzewnicy (wartość numeryczna)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Stan nagrzewnicy"
+    register_type: holding
+    address: 33
+    unit_of_measurement: ""
+    state_class: measurement
+    accuracy_decimals: 0
+
+  # Rejestr 34 – Stan chłodnicy (wartość numeryczna)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Stan chłodnicy"
+    register_type: holding
+    address: 34
+    unit_of_measurement: ""
+    state_class: measurement
+    accuracy_decimals: 0
+
+  # Rejestr 35 – Tryb urlopowy (wartość numeryczna / liczba dni)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Tryb urlopowy (dni)"
+    register_type: holding
+    address: 35
+    unit_of_measurement: "dni"
+    state_class: measurement
+    accuracy_decimals: 0
+
+  # Rejestr 36 – Wymiana filtra (licznik dni)
+  # W integracji HA to sensor z jednostką "days", nie tylko binary_sensor
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Wymiana filtra (dni)"
+    register_type: holding
+    address: 36
+    unit_of_measurement: "dni"
+    state_class: measurement
+    accuracy_decimals: 0
+
+  # Rejestr 45 – Impreza (czas pozostały w minutach)
+  # W integracji HA odczyt czasu pozostałego jako sensor
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Impreza (czas pozostały)"
+    register_type: holding
+    address: 45
+    unit_of_measurement: "min"
+    state_class: measurement
+    accuracy_decimals: 0
+
+  # Rejestr 46 – Bieg I (stan wejścia)
+  # W integracji HA jako sensor, nie tylko binary_sensor
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Bieg I (stan)"
+    register_type: holding
+    address: 46
+    unit_of_measurement: ""
+    state_class: measurement
+    accuracy_decimals: 0
+
+  # Rejestr 47 – Bieg III (stan wejścia)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Bieg III (stan)"
+    register_type: holding
+    address: 47
+    unit_of_measurement: ""
+    state_class: measurement
+    accuracy_decimals: 0
+
+  # Rejestr 48 – Okap – stan
+  # W integracji HA jako sensor
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Okap (stan)"
+    register_type: holding
+    address: 48
+    unit_of_measurement: ""
+    state_class: measurement
+    accuracy_decimals: 0
+
+  # Rejestr 55 – Wilgotność pokój
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Wilgotność pokój"
+    register_type: holding
+    address: 55
+    unit_of_measurement: "%"
+    device_class: humidity
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  # Rejestr 56 – Wilgotność łazienka 1
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Wilgotność łazienka 1"
+    register_type: holding
+    address: 56
+    unit_of_measurement: "%"
+    device_class: humidity
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  # Rejestr 57 – Wilgotność łazienka 2
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Wilgotność łazienka 2"
+    register_type: holding
+    address: 57
+    unit_of_measurement: "%"
+    device_class: humidity
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  # Rejestr 65 – Temperatura pokój (czujnik wilgotności)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Temperatura pokój (czujnik wilgotności)"
+    register_type: holding
+    address: 65
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: |-
+          if (x == 63066) return NAN;
+          if (x > 32767) return (x - 65536) / 10.0;
+          return x / 10.0;
+
+  # Rejestr 66 – Temperatura łazienka 1
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Temperatura łazienka 1"
+    register_type: holding
+    address: 66
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: |-
+          if (x == 63066) return NAN;
+          if (x > 32767) return (x - 65536) / 10.0;
+          return x / 10.0;
+
+  # Rejestr 67 – Temperatura łazienka 2
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Temperatura łazienka 2"
+    register_type: holding
+    address: 67
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - lambda: |-
+          if (x == 63066) return NAN;
+          if (x > 32767) return (x - 65536) / 10.0;
+          return x / 10.0;
+
+# ─── SENSORY TEKSTOWE (bieg, błędy) ──────────────────────────────────────────
+text_sensor:
+  # Rejestr 2 – Bieg nawiewu
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Bieg nawiewu"
+    register_type: holding
+    address: 2
+    raw_encode: NONE
+    lambda: |-
+      uint16_t val = data[item->offset] << 8 | data[item->offset + 1];
+      switch (val) {
+        case 0: return std::string("Postój");
+        case 1: return std::string("Tryb XF");
+        case 2: return std::string("Praca");
+        case 3: return std::string("Wietrzenie");
+        default: return std::string("Nieznany");
+      }
+
+  # Rejestr 3 – Bieg wywiewu
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Bieg wywiewu"
+    register_type: holding
+    address: 3
+    raw_encode: NONE
+    lambda: |-
+      uint16_t val = data[item->offset] << 8 | data[item->offset + 1];
+      switch (val) {
+        case 0: return std::string("Postój");
+        case 1: return std::string("Tryb XF");
+        case 2: return std::string("Praca");
+        case 3: return std::string("Wietrzenie");
+        default: return std::string("Nieznany");
+      }
+
+  # Rejestr 37 – Błędy (raw binarny)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Błędy (raw)"
+    register_type: holding
+    address: 37
+    raw_encode: HEXBYTES
+
+
+# ─── BINARNE (statusy urządzeń) ───────────────────────────────────────────────
+binary_sensor:
+  # Rejestr 31 – Bypass
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Bypass aktywny"
+    register_type: holding
+    address: 31
+    bitmask: 0x1
+    device_class: running
+
+  # Rejestr 32 – Nawilżacz
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Nawilżacz aktywny"
+    register_type: holding
+    address: 32
+    bitmask: 0x1
+    device_class: running
+
+  # Rejestr 33 – Nagrzewnica
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Nagrzewnica aktywna"
+    register_type: holding
+    address: 33
+    bitmask: 0x1
+    device_class: heat
+
+  # Rejestr 34 – Chłodnica
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Chłodnica aktywna"
+    register_type: holding
+    address: 34
+    bitmask: 0x1
+    device_class: cold
+
+  # Rejestr 35 – Urlop
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Tryb urlopowy"
+    register_type: holding
+    address: 35
+    bitmask: 0x1
+
+  # Rejestr 46 – Wejście bieg 1
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Wejście bieg 1"
+    register_type: holding
+    address: 46
+    bitmask: 0x1
+
+  # Rejestr 47 – Wejście bieg 3
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Wejście bieg 3"
+    register_type: holding
+    address: 47
+    bitmask: 0x1
+
+  # Rejestr 48 – Wejście okap
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Wejście okap"
+    register_type: holding
+    address: 48
+    bitmask: 0x1
+
+  # Rejestr 49 – Wejście P.Poż
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Wejście P.Poż"
+    register_type: holding
+    address: 49
+    bitmask: 0x1
+    device_class: safety
+
+  # Rejestr 63 – Antyzamarzanie
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Antyzamarzanie"
+    register_type: holding
+    address: 63
+    bitmask: 0x1
+
+  # Rejestr 64 – Nagrzewnica pierwotna
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Nagrzewnica pierwotna"
+    register_type: holding
+    address: 64
+    bitmask: 0x1
+    device_class: heat
+
+  # Rejestr 70 – Przepustnica strefowa (stan)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Przepustnica strefowa"
+    register_type: holding
+    address: 70
+    bitmask: 0x1
+
+  # Rejestr 36 – Potrzeba wymiany filtra (osobny sensor)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Wymiana filtra potrzebna"
+    register_type: holding
+    address: 36
+    bitmask: 0x1
+    lambda: |-
+      uint16_t val = data[item->offset] << 8 | data[item->offset + 1];
+      return (val == 0);
+    device_class: problem
+
+
+# ─── SELEKTORY (R/W – bieg, tryby) ────────────────────────────────────────────
+select:
+  # Rejestr 2 – Bieg wentylacji (zapis)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Bieg wentylacji"
+    address: 2
+    value_type: U_WORD
+    optionsmap:
+      "Postój": 0
+      "Tryb XF": 1
+      "Praca": 2
+      "Wietrzenie": 3
+
+  # Rejestr 8 – Dzień tygodnia (który dzień edytujemy)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - dzień tygodnia"
+    address: 8
+    value_type: U_WORD
+    optionsmap:
+      "Niedziela": 0
+      "Poniedziałek": 1
+      "Wtorek": 2
+      "Środa": 3
+      "Czwartek": 4
+      "Piątek": 5
+      "Sobota": 6
+
+  # Rejestr 14 – Bieg strefy 1
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - bieg strefy 1"
+    address: 14
+    value_type: U_WORD
+    optionsmap:
+      "Postój": 0
+      "Tryb XF": 1
+      "Praca": 2
+      "Wietrzenie": 3
+
+  # Rejestr 15 – Bieg strefy 2
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - bieg strefy 2"
+    address: 15
+    value_type: U_WORD
+    optionsmap:
+      "Postój": 0
+      "Tryb XF": 1
+      "Praca": 2
+      "Wietrzenie": 3
+
+  # Rejestr 16 – Bieg strefy 3
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - bieg strefy 3"
+    address: 16
+    value_type: U_WORD
+    optionsmap:
+      "Postój": 0
+      "Tryb XF": 1
+      "Praca": 2
+      "Wietrzenie": 3
+
+  # Rejestr 17 – Bieg strefy 4
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - bieg strefy 4"
+    address: 17
+    value_type: U_WORD
+    optionsmap:
+      "Postój": 0
+      "Tryb XF": 1
+      "Praca": 2
+      "Wietrzenie": 3
+
+  # Rejestr 18 – Bieg strefy 5
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - bieg strefy 5"
+    address: 18
+    value_type: U_WORD
+    optionsmap:
+      "Postój": 0
+      "Tryb XF": 1
+      "Praca": 2
+      "Wietrzenie": 3
+
+
+# ─── LICZBY (R/W – nastawy) ───────────────────────────────────────────────────
+number:
+  # Rejestr 10 – Koniec strefy 1 (początek strefy 2)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - koniec strefy 1"
+    address: 10
+    min_value: 15
+    max_value: 1380
+    step: 15
+    unit_of_measurement: "min"
+    mode: box
+
+  # Rejestr 11 – Koniec strefy 2 (początek strefy 3)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - koniec strefy 2"
+    address: 11
+    min_value: 30
+    max_value: 1395
+    step: 15
+    unit_of_measurement: "min"
+    mode: box
+
+  # Rejestr 12 – Koniec strefy 3 (początek strefy 4)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - koniec strefy 3"
+    address: 12
+    min_value: 45
+    max_value: 1410
+    step: 15
+    unit_of_measurement: "min"
+    mode: box
+
+  # Rejestr 13 – Koniec strefy 4 (początek strefy 5)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - koniec strefy 4"
+    address: 13
+    min_value: 60
+    max_value: 1425
+    step: 15
+    unit_of_measurement: "min"
+    mode: box
+
+  # Rejestr 19 – Temperatura strefy 1
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - temp strefy 1"
+    address: 19
+    min_value: 10
+    max_value: 30
+    step: 1
+    unit_of_measurement: "°C"
+    mode: slider
+
+  # Rejestr 20 – Temperatura strefy 2
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - temp strefy 2"
+    address: 20
+    min_value: 10
+    max_value: 30
+    step: 1
+    unit_of_measurement: "°C"
+    mode: slider
+
+  # Rejestr 21 – Temperatura strefy 3
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - temp strefy 3"
+    address: 21
+    min_value: 10
+    max_value: 30
+    step: 1
+    unit_of_measurement: "°C"
+    mode: slider
+
+  # Rejestr 22 – Temperatura strefy 4
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - temp strefy 4"
+    address: 22
+    min_value: 10
+    max_value: 30
+    step: 1
+    unit_of_measurement: "°C"
+    mode: slider
+
+  # Rejestr 23 – Temperatura strefy 5
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Program - temp strefy 5"
+    address: 23
+    min_value: 10
+    max_value: 30
+    step: 1
+    unit_of_measurement: "°C"
+    mode: slider
+
+  # Rejestr 41 – Nagrzewnica (dni, maks. 60)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Nagrzewnica aktywacja (dni)"
+    address: 41
+    min_value: 0
+    max_value: 60
+    step: 1
+    unit_of_measurement: "dni"
+    mode: slider
+
+  # Rejestr 42 – Chłodnica (dni, maks. 60)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Chłodnica aktywacja (dni)"
+    address: 42
+    min_value: 0
+    max_value: 60
+    step: 1
+    unit_of_measurement: "dni"
+    mode: slider
+
+  # Rejestr 43 – Urlop (dni, maks. 30)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Urlop (dni)"
+    address: 43
+    min_value: 0
+    max_value: 30
+    step: 1
+    unit_of_measurement: "dni"
+    mode: slider
+
+  # Rejestr 44 – Funkcja kominek (sekundy, maks. 180)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Funkcja kominek (sekundy)"
+    address: 44
+    min_value: 0
+    max_value: 180
+    step: 1
+    unit_of_measurement: "s"
+    mode: slider
+
+  # Rejestr 45 – Funkcja impreza (minuty, maks. 720)
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Funkcja impreza (minuty)"
+    address: 45
+    min_value: 0
+    max_value: 720
+    step: 15
+    unit_of_measurement: "min"
+    mode: slider
+
+  # Rejestr 52 – Moc/Przepływ bieg 1
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Przepływ bieg 1"
+    address: 52
+    min_value: 10
+    max_value: 1600
+    step: 10
+    unit_of_measurement: "m³/h"
+    mode: box
+
+  # Rejestr 53 – Moc/Przepływ bieg 2
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Przepływ bieg 2"
+    address: 53
+    min_value: 10
+    max_value: 1600
+    step: 10
+    unit_of_measurement: "m³/h"
+    mode: box
+
+  # Rejestr 54 – Moc/Przepływ bieg 3
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Przepływ bieg 3"
+    address: 54
+    min_value: 10
+    max_value: 1600
+    step: 10
+    unit_of_measurement: "m³/h"
+    mode: box
+
+
+# ─── PRZEŁĄCZNIKI (R/W – aktywacja/dezaktywacja) ─────────────────────────────
+# Logika Write → Verify (wg https://github.com/jrx-code/hassio-integration-wanas):
+#   Stan odczytywany jest z rejestru statusowego (verify_register),
+#   a zapis idzie do rejestru sterującego (address).
+#   Dla Bypass/Nawilżacza wartość ON = 1, dla pozostałych – wartość max czasu.
+
+switch:
+  # Rejestr 38 – GWC (zapis 38 → weryfikacja reg.30)
+  # ON=1 / OFF=0
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "GWC"
+    register_type: holding
+    address: 38
+    bitmask: 0x1
+
+  # Rejestr 39 – Bypass (zapis 39 → weryfikacja reg.31)
+  # ON=1 / OFF=0
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Bypass"
+    register_type: holding
+    address: 39
+    bitmask: 0x1
+
+  # Rejestr 40 – Nawilżacz (zapis 40 → weryfikacja reg.32)
+  # ON=1 / OFF=0
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Nawilżacz"
+    register_type: holding
+    address: 40
+    bitmask: 0x1
+
+  # Rejestr 41 – Nagrzewnica (zapis 41 → weryfikacja reg.33)
+  # ON=1 (aktywacja na max 60 dni) / OFF=0
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Nagrzewnica"
+    register_type: holding
+    address: 41
+    write_lambda: |-
+      if (x) {
+        payload = {0x00, 0x01};  // ON: aktywuj (1 dzień)
+      } else {
+        payload = {0x00, 0x00};  // OFF: dezaktywuj
+      }
+      return true;
+    lambda: |-
+      // Stan odczytuj z rejestru 33 (Nagrzewnica aktywna)
+      return data[item->offset] << 8 | data[item->offset + 1];
+
+  # Rejestr 42 – Chłodnica (zapis 42 → weryfikacja reg.34)
+  # ON=1 (aktywacja na max 60 dni) / OFF=0
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Chłodnica"
+    register_type: holding
+    address: 42
+    write_lambda: |-
+      if (x) {
+        payload = {0x00, 0x01};  // ON: aktywuj (1 dzień)
+      } else {
+        payload = {0x00, 0x00};  // OFF: dezaktywuj
+      }
+      return true;
+    lambda: |-
+      return data[item->offset] << 8 | data[item->offset + 1];
+
+  # Rejestr 43 – Urlop (zapis 43 → weryfikacja reg.35)
+  # ON=30 (max 30 dni) / OFF=0
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Urlop"
+    register_type: holding
+    address: 43
+    write_lambda: |-
+      if (x) {
+        payload = {0x00, 0x1E};  // ON: 30 dni (0x1E = 30)
+      } else {
+        payload = {0x00, 0x00};  // OFF
+      }
+      return true;
+    lambda: |-
+      return data[item->offset] << 8 | data[item->offset + 1];
+
+  # Rejestr 44 – Kominek (zapis 44 → weryfikacja reg.44)
+  # ON=180 (180 sekund) / OFF=0
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Kominek"
+    register_type: holding
+    address: 44
+    write_lambda: |-
+      if (x) {
+        payload = {0x00, 0xB4};  // ON: 180 sekund (0xB4 = 180)
+      } else {
+        payload = {0x00, 0x00};  // OFF
+      }
+      return true;
+    lambda: |-
+      return data[item->offset] << 8 | data[item->offset + 1];
+
+  # Rejestr 45 – Impreza (zapis 45 → weryfikacja reg.45)
+  # ON=720 (720 minut = 12h) / OFF=0
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Impreza"
+    register_type: holding
+    address: 45
+    write_lambda: |-
+      if (x) {
+        payload = {0x02, 0xD0};  // ON: 720 minut (0x02D0 = 720)
+      } else {
+        payload = {0x00, 0x00};  // OFF
+      }
+      return true;
+    lambda: |-
+      return data[item->offset] << 8 | data[item->offset + 1];
+
+  # Rejestr 62 – Przepustnica strefowa (zapis 62 → weryfikacja reg.70)
+  # ON=1 / OFF=0
+  - platform: modbus_controller
+    modbus_controller_id: wanas
+    name: "Przepustnica strefowa"
+    register_type: holding
+    address: 62
+    bitmask: 0x1
+
+
+# ─── PROGRAM TYGODNIOWY – uwagi ───────────────────────────────────────────────
+# Sposób działania:
+#   1. Zapisz dzień tygodnia do rejestru 8 (select "Program - dzień tygodnia")
+#   2. Odczyt/zapis stref (rejestry 10–23) dotyczy wybranego dnia
+#   Skrypt HA wykonuje kroki 1→2 sekwencyjnie.
+#
+# Końce stref wyrażone w minutach od północy (skok 15 min):
+#   Strefa 1: rejestr 10 (15–1380 min, domyślnie 300 = 5:00)
+#   Strefa 2: rejestr 11 (30–1395 min, domyślnie 600 = 10:00)
+#   Strefa 3: rejestr 12 (45–1410 min, domyślnie 900 = 15:00)
+#   Strefa 4: rejestr 13 (60–1425 min, domyślnie 1200 = 20:00)
+#   Strefa 5: biegnie do końca doby
+#
+# Bieg stref: rejestry 14–18 (0=Postój, 1=Tryb XF, 2=Praca, 3=Wietrzenie)
+# Temperatura stref: rejestry 19–23 (10–30°C, domyślnie 20°C)
+#
+# Rejestry 50 (Data) i 51 (Godzina) są dostępne w Modbus (R/W),
+# ale wymagają specjalnego formatu bitowego wg dokumentacji urządzenia.
+# Zaleca się synchronizację czasu przez panel sterownika lub własny skrypt HA.
