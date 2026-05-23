@@ -32,7 +32,7 @@ captive_portal:
 
 
 # ─── UART / Modbus ────────────────────────────────────────────────────────────
-# Podłączenie RS-485 do esp32:
+# Podłączenie RS-485:
 #   GPIO16 (RX) → A (DATA+) konwertera RS-485
 #   GPIO17 (TX) → B (DATA-) konwertera RS-485
 #   GPIO4       → DE/RE (kierunek transmisji) konwertera RS-485
